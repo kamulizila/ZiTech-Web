@@ -89,43 +89,46 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Attempt to find the user in the userregistered table
-        $user = Admin::where('email', $request->email)->first();
+        // Only check the Admin table
+        $admin = Admin::where('email', $request->email)->first();
 
-        if (!$user) {
-            $user = UserRegistered::where('email', $request->email)->first();
-        }
-        // If the user is not found in the userregistered table, check the get_started_requests table
-        if (!$user) {
-            $user = GetStartedRequest::where('email', $request->email)->first();
-        }
-
-        // If the user is not found in the get_started_requests table, check the orders table
-        if (!$user) {
-            $user = Order::where('email', $request->email)->first();
-        }
-
-        // Check if the user exists and the password is correct
-        if ($user && Hash::check($request->password, $user->password)) {
-            // Use Auth facade to log the user in
-            Auth::login($user); // This automatically manages the session
+        // Check if admin exists and password is correct
+        if ($admin && Hash::check($request->password, $admin->password)) {
+            // Log in the admin using the 'admin' guard
+            Auth::guard('admin')->login($admin);
 
             // Authentication successful
             return response()->json([
                 'status' => 'success',
-                'message' => 'Login successful',
-                'user' => $user,
-                'redirect_url' => $user->role == 'admin' ? '/admin/dashboard' : '/dashboard', // Dynamic redirect URL based on role
+                'message' => 'Admin login successful',
+                'user' => $admin,
+                'redirect_url' => '/dashboard', // Always redirect to admin dashboard
             ]);
-        } else {
-            // Authentication failed
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Invalid email or password',
-            ], 401); // Return 401 Unauthorized status code
         }
+
+         // Check regular users (user, get_started, and orders)
+    $user = UserRegistered::where('email', $request->email)->first();
+    if (!$user) {
+        $user = GetStartedRequest::where('email', $request->email)->first();
+    }
+    if (!$user) {
+        $user = Order::where('email', $request->email)->first();
     }
 
+    if ($user && Hash::check($request->password, $user->password)) {
+        Auth::guard('web')->login($user);
+        return response()->json([
+            'status' => 'success',
+            'message' => 'User login successful',
+            'redirect_url' => '/userdashboard',
+        ]);
+    }
+        // Authentication failed - only admins can login
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Invalid credentials or unauthorized access',
+        ], 401);
+    }
     /**
      * Handle user logout.
      *
